@@ -179,6 +179,7 @@ export function SwipablePage({
     const idx = views.findIndex((v) => v.value === currentView);
     return idx === -1 ? 0 : idx;
   }, [currentView, views]);
+  const currentActions = views.find((v) => v.value === currentView)?.actions;
 
   const handleViewChange = React.useCallback(
     (nextView: string) => {
@@ -217,16 +218,17 @@ export function SwipablePage({
           /* Mobile: SwipableView with navigation */
           <div className="flex h-full flex-col md:hidden">
             {/* Mobile Navigation at top */}
-            <div className="pt-safe flex shrink-0 items-center justify-between px-3 pb-2">
-              <div className="w-10" />
-              <MobileNavigation
-                views={views}
-                currentView={currentView}
-                onViewChange={handleViewChange}
-              />
-              <div className="flex items-center gap-1.5">
-                {views.find((v) => v.value === currentView)?.actions}
+            <div className="pt-safe flex shrink-0 flex-col gap-2 px-3 pb-2">
+              <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center">
+                <div className="w-10" />
+                <MobileNavigation
+                  views={views}
+                  currentView={currentView}
+                  onViewChange={handleViewChange}
+                />
+                <div />
               </div>
+              {currentActions && <div className="flex min-w-0 justify-end">{currentActions}</div>}
             </div>
 
             <div className="min-h-0 flex-1 overflow-hidden">
@@ -270,9 +272,7 @@ export function SwipablePage({
                 />
               </div>
               {/* Actions slot - renders current view's actions */}
-              <div className="flex items-center gap-2">
-                {views.find((v) => v.value === currentView)?.actions}
-              </div>
+              <div className="flex items-center gap-2">{currentActions}</div>
             </div>
 
             {/* Content - relative for absolute positioned actions within */}
