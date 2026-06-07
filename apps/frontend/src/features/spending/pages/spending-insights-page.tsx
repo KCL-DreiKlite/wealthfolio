@@ -403,7 +403,9 @@ export default function SpendingInsightsPage() {
     return <Navigate to="/dashboard?tab=spending" replace />;
   }
 
-  const periodToggle = <SpendingPeriodToggle value={period} onValueChange={setPeriodAndUrl} />;
+  const periodToggle = (
+    <SpendingPeriodToggle value={customRange ? null : period} onValueChange={setPeriodAndUrl} />
+  );
 
   return (
     <Page>
