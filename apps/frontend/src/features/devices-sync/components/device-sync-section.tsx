@@ -136,10 +136,7 @@ export function DeviceSyncSection() {
   }, [suppressReadyStateBootstrapPrompt]);
 
   const releasePairingBootstrapOwner = useCallback(() => {
-    if (
-      bootstrapOwnerRef.current === "pairing" ||
-      bootstrapOwnerRef.current === "pairing_failed"
-    ) {
+    if (bootstrapOwnerRef.current === "pairing" || bootstrapOwnerRef.current === "pairing_failed") {
       bootstrapOwnerRef.current = "none";
     }
     setBootstrapOwner((owner) =>
@@ -215,22 +212,25 @@ export function DeviceSyncSection() {
     setPrepareError(null);
   }, [releasePairingBootstrapOwner]);
 
-  const handlePairingBootstrapStateChange = useCallback((state: PairingBootstrapState) => {
-    if (state === "active" || state === "failed") {
-      setShowBootstrapOverwriteDialog(false);
-      setOverwriteRisk(null);
-    }
-    if (state === "idle") {
-      releasePairingBootstrapOwner();
-      return;
-    }
-    bootstrapOwnerRef.current = state === "active" ? "pairing" : "pairing_failed";
-    setBootstrapOwner((owner) => {
-      if (state === "active") return "pairing";
-      if (state === "failed") return "pairing_failed";
-      return owner === "pairing" ? "none" : owner;
-    });
-  }, [releasePairingBootstrapOwner]);
+  const handlePairingBootstrapStateChange = useCallback(
+    (state: PairingBootstrapState) => {
+      if (state === "active" || state === "failed") {
+        setShowBootstrapOverwriteDialog(false);
+        setOverwriteRisk(null);
+      }
+      if (state === "idle") {
+        releasePairingBootstrapOwner();
+        return;
+      }
+      bootstrapOwnerRef.current = state === "active" ? "pairing" : "pairing_failed";
+      setBootstrapOwner((owner) => {
+        if (state === "active") return "pairing";
+        if (state === "failed") return "pairing_failed";
+        return owner === "pairing" ? "none" : owner;
+      });
+    },
+    [releasePairingBootstrapOwner],
+  );
 
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["sync", "device", "current"] });
