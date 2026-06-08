@@ -93,6 +93,7 @@ const VISIBLE_SPENDING_DASHBOARD_PERIODS: SpendingDashboardPeriod[] = [
 
 const DEFAULT_INTERVAL: SpendingDashboardPeriod = "MTD";
 const INTERVAL_STORAGE_KEY = "spending-interval";
+const MONTH_STORAGE_KEY = "spending-month";
 const MONTH_PARAM = "spendingMonth";
 const INTERVAL_DESCRIPTIONS: Record<SpendingDashboardPeriod, string> = {
   MTD: "this month",
@@ -268,11 +269,12 @@ function insightPeriodForDashboardInterval(code: SpendingDashboardPeriod): Repor
 function selectionFromParams(
   params: URLSearchParams,
   persistedInterval: string,
+  persistedMonth: string | null,
 ): SpendingSelection {
   const restoreCode = normalizeSpendingDashboardPeriod(
     params.get("spendingInterval") ?? persistedInterval,
   );
-  const monthKey = params.get(MONTH_PARAM);
+  const monthKey = params.get(MONTH_PARAM) ?? persistedMonth;
   if (monthKey && parseMonthKey(monthKey)) return { kind: "month", monthKey, restoreCode };
   return { kind: "period", code: restoreCode };
 }
@@ -429,9 +431,13 @@ export default function SpendingTabContent() {
     INTERVAL_STORAGE_KEY,
     DEFAULT_INTERVAL,
   );
+  const [persistedMonth, setPersistedMonth] = usePersistentState<string | null>(
+    MONTH_STORAGE_KEY,
+    null,
+  );
   const selection = useMemo(
-    () => selectionFromParams(searchParams, persistedInterval),
-    [searchParams, persistedInterval],
+    () => selectionFromParams(searchParams, persistedInterval, persistedMonth),
+    [searchParams, persistedInterval, persistedMonth],
   );
   const selectedPeriod = selection.kind === "period" ? selection.code : null;
   const customMonth = selection.kind === "month" ? selection.monthKey : null;
@@ -620,6 +626,7 @@ export default function SpendingTabContent() {
 
   const handleIntervalSelect = (code: SpendingDashboardPeriod) => {
     setPersistedInterval(code);
+    setPersistedMonth(null);
     setSearchParams(
       (prev) => {
         const p = new URLSearchParams(prev);
@@ -639,6 +646,7 @@ export default function SpendingTabContent() {
   };
 
   const handleCustomMonthSelect = (monthKey: string | null) => {
+    setPersistedMonth(monthKey);
     setSearchParams(
       (prev) => {
         const p = new URLSearchParams(prev);
