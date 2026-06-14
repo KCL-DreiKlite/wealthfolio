@@ -53,16 +53,23 @@ impl CustomScraperProvider {
 
     /// Expand URL template variables using the shared template engine.
     fn expand_url(
-        &self,
         url: &str,
         symbol: &str,
         context: Option<&QuoteContext>,
         from: Option<&str>,
         to: Option<&str>,
     ) -> String {
-        let isin_owned: Option<String> = context.and_then(|ctx| match &ctx.instrument {
-            wealthfolio_market_data::InstrumentId::Bond { isin } => Some(isin.as_ref().to_string()),
-            _ => None,
+        let isin_owned: Option<String> = context.and_then(|ctx| {
+            ctx.identifiers
+                .isin
+                .as_deref()
+                .map(str::to_string)
+                .or_else(|| match &ctx.instrument {
+                    wealthfolio_market_data::InstrumentId::Bond { isin } => {
+                        Some(isin.as_ref().to_string())
+                    }
+                    _ => None,
+                })
         });
 
         let mic_owned: Option<String> = context.and_then(|ctx| match &ctx.instrument {
@@ -281,7 +288,7 @@ impl CustomScraperProvider {
             });
         }
 
-        let url = self.expand_url(&source.url, symbol, context, from, to);
+        let url = Self::expand_url(&source.url, symbol, context, from, to);
 
         validate_url(&url).map_err(|e| MarketDataError::ProviderError {
             provider: DATA_SOURCE_CUSTOM_SCRAPER.to_string(),
@@ -1207,6 +1214,9 @@ fn extract_json_string(body: &str, path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::borrow::Cow;
+    use std::sync::Arc;
+    use wealthfolio_market_data::{InstrumentId, ProviderOverrides, QuoteIdentifiers};
 
     fn ymd(y: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()
@@ -1234,6 +1244,85 @@ mod tests {
             default_price: None,
             date_timezone: None,
         }
+    }
+
+    #[test]
+    fn expand_url_uses_equity_identifier_isin_independently_from_symbol() {
+        let context = QuoteContext {
+            instrument: InstrumentId::Equity {
+                ticker: Arc::from("LKPG"),
+                mic: None,
+            },
+            identifiers: QuoteIdentifiers {
+                isin: Some(Cow::Borrowed("SI0031101346")),
+            },
+            overrides: None,
+            currency_hint: Some(Cow::Borrowed("EUR")),
+            preferred_provider: None,
+            bond_metadata: None,
+            custom_provider_code: Some("local-exchange".to_string()),
+        };
+
+        let url = CustomScraperProvider::expand_url(
+            "https://server/history/{ISIN}/{SYMBOL}/{FROM}/{TO}/json",
+            "LKPG",
+            Some(&context),
+            Some("2026-03-13"),
+            Some("2026-06-11"),
+        );
+
+        assert_eq!(
+            url,
+            "https://server/history/SI0031101346/LKPG/2026-03-13/2026-06-11/json"
+        );
+    }
+
+    #[test]
+    fn resolve_symbol_uses_legacy_bond_custom_provider_mapping() {
+        let overrides = ProviderOverrides::from_json(&serde_json::json!({
+            "CUSTOM:single-point": {
+                "type": "bond_isin",
+                "symbol": "SWB:US744330AA93"
+            }
+        }))
+        .unwrap();
+        let context = QuoteContext {
+            instrument: InstrumentId::Bond {
+                isin: Arc::from("US744330AA93"),
+            },
+            identifiers: Default::default(),
+            overrides: Some(overrides),
+            currency_hint: Some(Cow::Borrowed("USD")),
+            preferred_provider: Some(Cow::Borrowed("CUSTOM_SCRAPER")),
+            bond_metadata: None,
+            custom_provider_code: Some("single-point".to_string()),
+        };
+        let source = CustomProviderSource {
+            id: "source-1".to_string(),
+            provider_id: "single-point".to_string(),
+            kind: "latest".to_string(),
+            format: "json".to_string(),
+            url: "https://example.test/?ticker={SYMBOL}".to_string(),
+            price_path: "$.price".to_string(),
+            date_path: None,
+            date_format: None,
+            currency_path: None,
+            factor: None,
+            invert: None,
+            locale: None,
+            headers: None,
+            open_path: None,
+            high_path: None,
+            low_path: None,
+            volume_path: None,
+            default_price: None,
+            date_timezone: None,
+        };
+
+        assert_eq!(
+            CustomScraperProvider::resolve_symbol(&context, &source, "US744330AA93"),
+            "SWB:US744330AA93"
+        );
     }
 
     #[test]
