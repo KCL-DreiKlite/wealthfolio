@@ -1,7 +1,10 @@
 //! Commands for syncing broker data from the cloud API.
 
 use log::{debug, error, info};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::context::ServiceContext;
@@ -11,6 +14,36 @@ use wealthfolio_connect::{
     PlansResponse, Platform, SyncConfig, SyncOrchestrator, SyncProgressPayload,
     SyncProgressReporter, SyncResult, UserInfo,
 };
+
+pub(crate) struct BrokerSyncRunGuard {
+    running: Arc<AtomicBool>,
+}
+
+impl Drop for BrokerSyncRunGuard {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::Release);
+    }
+}
+
+pub(crate) fn try_acquire_broker_sync_guard(
+    context: &ServiceContext,
+) -> Option<BrokerSyncRunGuard> {
+    context
+        .broker_sync_running()
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .ok()
+        .map(|_| BrokerSyncRunGuard {
+            running: context.broker_sync_running(),
+        })
+}
+
+pub(crate) fn is_active_broker_connection(connection: &BrokerConnection) -> bool {
+    !connection.disabled
+        && connection
+            .status
+            .as_deref()
+            .is_some_and(|status| status.eq_ignore_ascii_case("connected"))
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tauri Progress Reporter
@@ -88,6 +121,11 @@ pub async fn sync_broker_data(
         }
     }
 
+    let Some(guard) = try_acquire_broker_sync_guard(state.inner().as_ref()) else {
+        info!("[Connect] Broker sync skipped: sync already running");
+        return Err("Broker sync already running".to_string());
+    };
+
     info!("[Connect] Starting broker data sync ...");
 
     // Clone what we need for the spawned task
@@ -96,7 +134,7 @@ pub async fn sync_broker_data(
 
     // Spawn background task
     tauri::async_runtime::spawn(async move {
-        match perform_broker_sync(&context, Some(&app_handle)).await {
+        match perform_broker_sync_with_guard(&context, Some(&app_handle), guard).await {
             Ok(_result) => {
                 info!("[Connect] Broker sync completed successfully");
                 // Events are emitted by the orchestrator via TauriProgressReporter
@@ -132,6 +170,16 @@ pub async fn broker_ingest_run(
 pub async fn perform_broker_sync(
     context: &Arc<ServiceContext>,
     app: Option<&AppHandle>,
+) -> Result<SyncResult, String> {
+    let guard = try_acquire_broker_sync_guard(context)
+        .ok_or_else(|| "Broker sync already running".to_string())?;
+    perform_broker_sync_with_guard(context, app, guard).await
+}
+
+pub(crate) async fn perform_broker_sync_with_guard(
+    context: &Arc<ServiceContext>,
+    app: Option<&AppHandle>,
+    _guard: BrokerSyncRunGuard,
 ) -> Result<SyncResult, String> {
     info!("Starting broker data sync...");
 

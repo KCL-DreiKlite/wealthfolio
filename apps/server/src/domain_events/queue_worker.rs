@@ -34,6 +34,7 @@ pub struct QueueWorkerDeps {
     pub asset_service: Arc<dyn AssetServiceTrait + Send + Sync>,
     pub connect_sync_service: Arc<dyn BrokerSyncServiceTrait + Send + Sync>,
     pub event_bus: EventBus,
+    pub broker_sync_running: Arc<AtomicBool>,
     pub health_service: Arc<dyn wealthfolio_core::health::HealthServiceTrait + Send + Sync>,
     // We need a way to enqueue portfolio jobs. Since AppState is not easily cloneable,
     // we pass what we need for enqueue_portfolio_job (which spawns its own async task).
@@ -60,6 +61,25 @@ pub struct QueueWorkerDeps {
     /// Categorization rules service — auto-runs rules against newly-changed activities.
     pub categorization_rules_service:
         Arc<wealthfolio_spending::categorization_rules::CategorizationRulesService>,
+}
+
+struct BrokerSyncRunGuard {
+    running: Arc<AtomicBool>,
+}
+
+impl Drop for BrokerSyncRunGuard {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::Release);
+    }
+}
+
+fn try_acquire_broker_sync_guard(running: &Arc<AtomicBool>) -> Option<BrokerSyncRunGuard> {
+    running
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .ok()
+        .map(|_| BrokerSyncRunGuard {
+            running: Arc::clone(running),
+        })
 }
 
 /// Runs the event queue worker.
@@ -246,8 +266,16 @@ async fn process_event_batch(events: &[DomainEvent], deps: Arc<QueueWorkerDeps>)
         let event_bus = deps.event_bus.clone();
         let secret_store = deps.secret_store.clone();
         let token_lifecycle = deps.token_lifecycle.clone();
+        let broker_sync_running = deps.broker_sync_running.clone();
 
         tokio::spawn(async move {
+            let Some(_guard) = try_acquire_broker_sync_guard(&broker_sync_running) else {
+                tracing::info!(
+                    "Broker sync skipped after tracking mode change: sync already running"
+                );
+                return;
+            };
+
             match perform_broker_sync(
                 connect_sync_service,
                 event_bus,
