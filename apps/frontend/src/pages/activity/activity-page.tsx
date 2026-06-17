@@ -1,4 +1,4 @@
-import { getAccounts, getTransferPairForActivity } from "@/adapters";
+import { getAccounts } from "@/adapters";
 import { ActionPalette, type ActionPaletteGroup } from "@/components/action-palette";
 import { SwipablePage, type SwipablePageView } from "@/components/page";
 import {
@@ -34,7 +34,7 @@ import { ActivityViewControls, type ActivityViewMode } from "./components/activi
 import { BulkHoldingsModal } from "./components/forms/bulk-holdings-modal";
 import { MobileActivityForm } from "./components/mobile-forms/mobile-activity-form";
 import { TransferMatchDialog } from "./components/transfer-match-dialog";
-import { useActivityMutations } from "./hooks/use-activity-mutations";
+import { useActivityActionDialogs } from "./hooks/use-activity-action-dialogs";
 import { useActivitySearch, type ActivityStatusFilter } from "./hooks/use-activity-search";
 import {
   clearActivityUrlFilters,
@@ -81,9 +81,6 @@ function fromDateRange(range: DateRange | undefined): ActivityDateRangeFilter {
 }
 
 const ActivityPage = () => {
-  const [showForm, setShowForm] = useState(false);
-  const [selectedActivity, setSelectedActivity] = useState<Partial<ActivityDetails> | undefined>();
-  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const [showBulkHoldingsForm, setShowBulkHoldingsForm] = useState(false);
   const [showAlternativeAssetModal, setShowAlternativeAssetModal] = useState(false);
   const [transferMatchDialog, setTransferMatchDialog] = useState<{
@@ -95,6 +92,18 @@ const ActivityPage = () => {
   const [showSpendingActionPalette, setShowSpendingActionPalette] = useState(false);
   const isMobileViewport = useIsMobileViewport();
   const isCompactTableViewport = useIsCompactTableViewport();
+  const {
+    selectedActivity,
+    formOpen: showForm,
+    deleteDialogOpen: showDeleteAlert,
+    isDeleting,
+    openForm: handleEdit,
+    closeForm: handleFormClose,
+    requestDelete: handleDelete,
+    cancelDelete: handleDeleteCancel,
+    confirmDelete: handleDeleteConfirm,
+    duplicateActivity: handleDuplicate,
+  } = useActivityActionDialogs();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activityUrlFilterKey = searchParams.toString();
@@ -329,8 +338,6 @@ const ActivityPage = () => {
     queryFn: () => getAccounts(),
   });
 
-  const { deleteActivityMutation, duplicateActivityMutation } = useActivityMutations();
-
   const isDatagridView = viewMode === "datagrid";
   const shouldUseDatagridView = isDatagridView && !isCompactTableViewport;
 
@@ -466,76 +473,12 @@ const ActivityPage = () => {
     ? paginatedSearch.totalRowCount
     : infiniteSearch.totalRowCount;
 
-  const handleEdit = useCallback(
-    async (activity?: ActivityDetails, activityType?: ActivityType) => {
-      if (
-        activity?.id &&
-        (activity.activityType === ActivityType.TRANSFER_IN ||
-          activity.activityType === ActivityType.TRANSFER_OUT) &&
-        activity.sourceGroupId &&
-        ((activity.metadata?.flow as { is_external?: boolean } | undefined)?.is_external ??
-          false) !== true
-      ) {
-        try {
-          const pair = await getTransferPairForActivity(activity.id);
-          const counterpart =
-            activity.activityType === ActivityType.TRANSFER_IN ? pair.transferOut : pair.transferIn;
-          setSelectedActivity({
-            ...activity,
-            transferOutId: pair.transferOut.id,
-            transferInId: pair.transferIn.id,
-            counterpartActivityId: counterpart.id,
-            counterpartAccountId: counterpart.accountId,
-            counterpartAmount: counterpart.amount ?? null,
-            counterpartCurrency: counterpart.currency,
-            counterpartFxRate: pair.transferIn.fxRate ?? null,
-          });
-          setShowForm(true);
-          return;
-        } catch {
-          // Fall back to single-leg editing for invalid groups that are not valid internal pairs.
-          setSelectedActivity(activity);
-          setShowForm(true);
-          return;
-        }
-      }
-
-      setSelectedActivity(activity ?? { activityType });
-      setShowForm(true);
-    },
-    [],
-  );
-
-  const handleDelete = useCallback((activity: ActivityDetails) => {
-    setSelectedActivity(activity);
-    setShowDeleteAlert(true);
-  }, []);
-
-  const handleDuplicate = useCallback(
-    async (activity: ActivityDetails) => {
-      await duplicateActivityMutation.mutateAsync(activity);
-    },
-    [duplicateActivityMutation],
-  );
-
   const handleLinkTransfer = useCallback((activity: ActivityDetails) => {
     setTransferMatchDialog({ open: true, mode: "link", activity });
   }, []);
 
   const handleUnlinkTransfer = useCallback((activity: ActivityDetails) => {
     setTransferMatchDialog({ open: true, mode: "unlink", activity });
-  }, []);
-
-  const handleDeleteConfirm = async () => {
-    if (!selectedActivity?.id) return;
-    await deleteActivityMutation.mutateAsync(selectedActivity.id);
-    setShowDeleteAlert(false);
-    setSelectedActivity(undefined);
-  };
-
-  const handleFormClose = useCallback(() => {
-    setShowForm(false);
-    setSelectedActivity(undefined);
   }, []);
 
   const investmentsFiltersActive =
@@ -821,13 +764,10 @@ const ActivityPage = () => {
       )}
       <ActivityDeleteModal
         isOpen={showDeleteAlert}
-        isDeleting={deleteActivityMutation.isPending}
+        isDeleting={isDeleting}
         linkedTransfer={!!selectedActivity?.sourceGroupId}
         onConfirm={handleDeleteConfirm}
-        onCancel={() => {
-          setShowDeleteAlert(false);
-          setSelectedActivity(undefined);
-        }}
+        onCancel={handleDeleteCancel}
       />
       <BulkHoldingsModal
         open={showBulkHoldingsForm}
