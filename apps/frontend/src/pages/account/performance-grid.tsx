@@ -13,7 +13,7 @@ import { Skeleton } from "@wealthfolio/ui/components/ui/skeleton";
 import { Icons } from "@wealthfolio/ui";
 import { Alert, AlertDescription } from "@wealthfolio/ui/components/ui/alert";
 import { PerformanceResult } from "@/lib/types";
-import { performancePeriodPnl } from "@/lib/performance";
+import { performancePeriodPnl, performanceSummaryReturn } from "@/lib/performance";
 import { cn } from "@/lib/utils";
 import React from "react";
 
@@ -74,13 +74,11 @@ export const PerformanceGrid: React.FC<PerformanceGridProps> = ({
   const twrAnnualized = performance.returns.annualizedTwr ?? undefined;
   const irrValue = performance.returns.irr ?? undefined;
   const irrAnnualized = performance.returns.annualizedIrr ?? undefined;
-  const valueReturn = performance.returns.valueReturn ?? undefined;
+  const holdingsValueReturn = performanceSummaryReturn(performance) ?? undefined;
   const periodPnl = performancePeriodPnl(performance) ?? undefined;
   const volatility = performance.risk.volatility ?? undefined;
   const maxDrawdown = performance.risk.maxDrawdown ?? undefined;
-  const notApplicableReasons = performance.dataQuality.notApplicableReasons ?? [];
-  const reasonFor = (needle: string) =>
-    notApplicableReasons.find((reason) => reason.toLowerCase().includes(needle.toLowerCase()));
+  const unavailableReason = performance.dataQuality.notApplicableReasons?.[0];
 
   // For HOLDINGS mode accounts:
   // - TWR/IRR are NOT available (require cash flow tracking)
@@ -93,8 +91,8 @@ export const PerformanceGrid: React.FC<PerformanceGridProps> = ({
             <div className="grid grid-cols-2 gap-5">
               <MetricDisplay
                 label="Value Return"
-                value={valueReturn}
-                emptyReason={reasonFor("value return")}
+                value={holdingsValueReturn}
+                emptyReason={unavailableReason}
                 infoText={VALUE_RETURN_INFO}
                 isPercentage={true}
                 className="border-muted/30 bg-muted/30 rounded-md border"
@@ -102,7 +100,7 @@ export const PerformanceGrid: React.FC<PerformanceGridProps> = ({
               <MetricDisplay
                 label="Total P&L"
                 value={periodPnl}
-                emptyReason={reasonFor("P&L") ?? reasonFor("performance")}
+                emptyReason={unavailableReason}
                 infoText="Total profit or loss over the selected period."
                 isPercentage={false}
                 currency={performance.scope.currency}
@@ -111,7 +109,7 @@ export const PerformanceGrid: React.FC<PerformanceGridProps> = ({
               <MetricDisplay
                 label="Volatility"
                 value={volatility}
-                emptyReason={reasonFor("volatility")}
+                emptyReason={unavailableReason}
                 infoText={HOLDINGS_MODE_VOLATILITY_INFO}
                 isPercentage={true}
                 tone="neutral"
@@ -120,7 +118,7 @@ export const PerformanceGrid: React.FC<PerformanceGridProps> = ({
               <MetricDisplay
                 label="Max Drawdown"
                 value={maxDrawdown}
-                emptyReason={reasonFor("drawdown")}
+                emptyReason={unavailableReason}
                 infoText={HOLDINGS_MODE_MAX_DRAWDOWN_INFO}
                 isPercentage={true}
                 className="border-muted/30 bg-muted/30 rounded-md border"
@@ -141,7 +139,7 @@ export const PerformanceGrid: React.FC<PerformanceGridProps> = ({
               label="Time Weighted Return"
               value={twrValue}
               annualizedValue={twrAnnualized}
-              emptyReason={reasonFor("TWR")}
+              emptyReason={unavailableReason}
               infoText={TIME_WEIGHTED_RETURN_INFO}
               isPercentage={true}
               className="border-muted/30 bg-muted/30 rounded-md border"
@@ -150,7 +148,7 @@ export const PerformanceGrid: React.FC<PerformanceGridProps> = ({
               label="IRR"
               value={irrValue}
               annualizedValue={irrAnnualized}
-              emptyReason={reasonFor("IRR")}
+              emptyReason={unavailableReason}
               infoText={IRR_RETURN_INFO}
               isPercentage={true}
               className="border-muted/30 bg-muted/30 rounded-md border"
@@ -158,7 +156,7 @@ export const PerformanceGrid: React.FC<PerformanceGridProps> = ({
             <MetricDisplay
               label="Volatility"
               value={volatility}
-              emptyReason={reasonFor("volatility")}
+              emptyReason={unavailableReason}
               infoText={VOLATILITY_INFO}
               isPercentage={true}
               tone="neutral"
@@ -167,7 +165,7 @@ export const PerformanceGrid: React.FC<PerformanceGridProps> = ({
             <MetricDisplay
               label="Max Drawdown"
               value={maxDrawdown}
-              emptyReason={reasonFor("drawdown")}
+              emptyReason={unavailableReason}
               infoText={MAX_DRAWDOWN_INFO}
               isPercentage={true}
               className="border-muted/30 bg-muted/30 rounded-md border"

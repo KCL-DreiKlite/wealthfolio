@@ -1,3 +1,4 @@
+import { performancePeriodPnl, performanceSummaryReturn } from "@/lib/performance";
 import { AccountValuation, PerformanceResult } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
 import { PerformanceGrid } from "@/pages/account/performance-grid";
@@ -144,14 +145,12 @@ const AccountMetrics: React.FC<AccountMetricsProps> = ({
     );
 
   const displayCurrency = valuation?.accountCurrency || valuation?.baseCurrency;
+  const performanceCurrency = performance?.scope.currency || displayCurrency;
+  const performancePnl = performancePeriodPnl(performance);
+  const performanceReturn = performanceSummaryReturn(performance);
 
-  // Calculate Unrealized P&L for Holdings mode
-  // Use investmentMarketValue (not totalValue) to exclude cash from P&L calculation
-  const unrealizedPnL = (valuation?.investmentMarketValue || 0) - (valuation?.costBasis || 0);
-  const unrealizedPnLPercent =
-    valuation?.costBasis && valuation.costBasis !== 0
-      ? (unrealizedPnL / valuation.costBasis) * 100
-      : 0;
+  // Book value includes position cost basis plus cash.
+  const holdingsBookValue = valuation?.bookBasis ?? valuation?.costBasis ?? 0;
 
   // Different rows for Holdings vs Transactions mode
   const rows = isHoldingsMode
@@ -166,15 +165,29 @@ const AccountMetrics: React.FC<AccountMetricsProps> = ({
           ),
         },
         {
-          label: "Cost Basis",
-          value: <PrivacyAmount value={valuation?.costBasis || 0} currency={displayCurrency} />,
+          label: "Book Value",
+          value: <PrivacyAmount value={holdingsBookValue} currency={displayCurrency} />,
         },
         {
-          label: "Unrealized P&L",
-          value: (
+          label: "Period P&L",
+          value: performancePnl == null ? (
+            <span className="text-muted-foreground text-xs">N/A</span>
+          ) : (
             <span className="flex items-center gap-1">
-              <GainAmount value={unrealizedPnL} currency={displayCurrency} className="text-sm" />
-              <GainPercent value={unrealizedPnLPercent / 100} variant="badge" className="text-xs" />
+              <GainAmount
+                value={performancePnl}
+                currency={performanceCurrency}
+                className="text-sm"
+              />
+              {performanceReturn == null ? (
+                <span className="text-muted-foreground text-xs">N/A</span>
+              ) : (
+                <GainPercent
+                  value={performanceReturn}
+                  variant="badge"
+                  className="text-xs"
+                />
+              )}
             </span>
           ),
         },

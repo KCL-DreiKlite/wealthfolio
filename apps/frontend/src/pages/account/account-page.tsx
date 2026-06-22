@@ -36,7 +36,7 @@ import {
   HoldingType,
   isLiabilityAccountType,
 } from "@/lib/constants";
-import { performanceHeadlineReturn, performancePeriodPnl } from "@/lib/performance";
+import { performanceSummaryReturn, performancePeriodPnl } from "@/lib/performance";
 import { getPerformanceDateRangeForRequest } from "@/lib/performance-date-range";
 import { QueryKeys } from "@/lib/query-keys";
 import { useSettingsContext } from "@/lib/settings-provider";
@@ -416,7 +416,7 @@ const AccountPage = () => {
   }, [appTimezone, cashAuditActivities, selectedCashAuditTarget]);
 
   const frontendGainLossAmount = performancePeriodPnl(accountPerformance);
-  const frontendSimpleReturn = performanceHeadlineReturn(accountPerformance);
+  const frontendSimpleReturn = performanceSummaryReturn(accountPerformance);
   const displayedValueCurrency =
     account?.currency ??
     currentAccountValuation?.accountCurrency ??
@@ -470,7 +470,7 @@ const AccountPage = () => {
       return frontendSimpleReturn;
     }
     if (accountPerformance) {
-      return performanceHeadlineReturn(accountPerformance);
+      return performanceSummaryReturn(accountPerformance);
     }
     return null;
   }, [accountPerformance, selectedIntervalCode, frontendSimpleReturn, isHoldingsMode]);
